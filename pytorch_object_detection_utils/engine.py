@@ -9,8 +9,28 @@ from pytorch_object_detection_utils.coco_utils import get_coco_api_from_dataset
 from pytorch_object_detection_utils.coco_eval import CocoEvaluator
 import pytorch_object_detection_utils.utils as utils
 
+from torchvision.transforms import ToPILImage, ToTensor
 
-def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
+from PIL import Image, ImageDraw 
+import numpy as np
+
+def augment_images(images, targets, preds):
+    augmented_images = []
+    for img, target, pred in zip(images,targets, preds):
+        img = ToPILImage()(img.cpu())
+        img1 = ImageDraw.Draw(img)   
+        for bb in target['boxes']:
+            bb = bb.cpu().numpy()
+            img1.rectangle([bb[0], bb[1], bb[2], bb[3]], fill =None, outline ="green", width=5) 
+        for bb in pred['boxes']:
+            img1.rectangle([bb[0], bb[1], bb[2], bb[3]], fill =None, outline ="blue", width=5) 
+        #img1.rectangle([10, 10, 40, 40], fill =None, outline ="green", width=5) 
+        augmented_images.append(ToTensor()(img.resize((256,256))))
+    return augmented_images
+
+
+
+def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq,worst_batch_freq=1):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -23,7 +43,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
 
-    for images, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for images, targets in metric_logger.log_every(data_loader, print_freq, header) :
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -51,6 +71,38 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+
+    if epoch%worst_batch_freq == 0:
+        worst_loss = 0.0
+        worst_batch = None, None
+        for images, targets in data_loader:
+            images = list(image.to(device) for image in images)
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+            loss_dict = model(images, targets)
+
+            losses = sum(loss for loss in loss_dict.values())
+
+            # reduce losses over all GPUs for logging purposes
+            loss_dict_reduced = utils.reduce_dict(loss_dict)
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+
+            loss_value = losses_reduced.item()
+            
+            if loss_value >= worst_loss:
+                worst_loss = loss_value
+                worst_batch = images, targets
+
+        imgs, tgts = worst_batch
+        model.eval()
+        preds = model(imgs)
+        model.train()
+        metric_logger.worst_batch = augment_images(imgs, tgts, preds)               
+
+
+
+
 
     return metric_logger
 
