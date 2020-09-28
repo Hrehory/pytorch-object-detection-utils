@@ -30,7 +30,7 @@ def augment_images(images, targets, preds):
 
 
 
-def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq,worst_batch_freq=1):
+def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -71,39 +71,6 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq,wor
 
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
-
-
-    if epoch%worst_batch_freq == 0:
-        worst_loss = 0.0
-        worst_batch = None, None
-        for images, targets in data_loader:
-            images = list(image.to(device) for image in images)
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-
-            loss_dict = model(images, targets)
-
-            losses = sum(loss for loss in loss_dict.values())
-
-            # reduce losses over all GPUs for logging purposes
-            loss_dict_reduced = utils.reduce_dict(loss_dict)
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-
-            loss_value = losses_reduced.item()
-            
-            if loss_value >= worst_loss:
-                worst_loss = loss_value
-                worst_batch = images, targets
-
-        imgs, tgts = worst_batch
-        model.eval()
-        preds = model(imgs)
-        model.train()
-        metric_logger.worst_batch = augment_images(imgs, tgts, preds)               
-
-
-
-
-
     return metric_logger
 
 
@@ -151,7 +118,7 @@ def evaluate(model, data_loader, device):
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
+    #print("Averaged stats:", metric_logger)
     coco_evaluator.synchronize_between_processes()
 
     # accumulate predictions from all images

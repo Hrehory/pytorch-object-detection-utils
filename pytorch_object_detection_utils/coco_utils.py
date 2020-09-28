@@ -11,6 +11,25 @@ from pycocotools.coco import COCO
 
 import pytorch_object_detection_utils.transforms as T
 
+from contextlib import contextmanager
+@contextmanager
+def no_stdout():
+    import sys
+    old_stdout = sys.stdout
+    class CustomPrint():
+        def __init__(self, stdout):
+            self.old_stdout = stdout
+
+        def write(self, text):
+            if len(text.rstrip()):
+                pass #self.old_stdout.write('custom Print--->'+ text)
+
+    sys.stdout = CustomPrint(old_stdout)
+
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
 
 class FilterAndRemapCocoCategories(object):
     def __init__(self, categories, remap=True):
@@ -144,7 +163,8 @@ def _coco_remove_images_without_annotations(dataset, cat_list=None):
 
 
 def convert_to_coco_api(ds):
-    coco_ds = COCO()
+    with no_stdout():
+        coco_ds = COCO()
     # annotation IDs need to start at 1, not 0, see torchvision issue #1530
     ann_id = 1
     dataset = {'images': [], 'categories': [], 'annotations': []}
@@ -191,7 +211,8 @@ def convert_to_coco_api(ds):
             ann_id += 1
     dataset['categories'] = [{'id': i} for i in sorted(categories)]
     coco_ds.dataset = dataset
-    coco_ds.createIndex()
+    with no_stdout():
+        coco_ds.createIndex()
     return coco_ds
 
 

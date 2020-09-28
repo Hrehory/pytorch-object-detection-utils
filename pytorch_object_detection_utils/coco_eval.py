@@ -15,6 +15,28 @@ from collections import defaultdict
 
 import pytorch_object_detection_utils.utils as utils
 
+from contextlib import contextmanager
+@contextmanager
+def no_stdout():
+    import sys
+    old_stdout = sys.stdout
+    class CustomPrint():
+        def __init__(self, stdout):
+            self.old_stdout = stdout
+
+        def write(self, text):
+            if len(text.rstrip()):
+                #self.old_stdout.write('custom Print--->'+ text)
+                pass
+
+    sys.stdout = CustomPrint(old_stdout)
+
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+
+
 
 class CocoEvaluator(object):
     def __init__(self, coco_gt, iou_types):
@@ -52,12 +74,14 @@ class CocoEvaluator(object):
 
     def accumulate(self):
         for coco_eval in self.coco_eval.values():
-            coco_eval.accumulate()
+            with no_stdout():
+                coco_eval.accumulate()
 
     def summarize(self):
         for iou_type, coco_eval in self.coco_eval.items():
-            print("IoU metric: {}".format(iou_type))
-            coco_eval.summarize()
+            #print("IoU metric: {}".format(iou_type))
+            with no_stdout():
+                coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):
         if iou_type == "bbox":
@@ -308,7 +332,7 @@ def evaluate(self):
     # add backward compatibility if useSegm is specified in params
     if p.useSegm is not None:
         p.iouType = 'segm' if p.useSegm == 1 else 'bbox'
-        print('useSegm (deprecated) is not None. Running {} evaluation'.format(p.iouType))
+        #print('useSegm (deprecated) is not None. Running {} evaluation'.format(p.iouType))
     # print('Evaluate annotation type *{}*'.format(p.iouType))
     p.imgIds = list(np.unique(p.imgIds))
     if p.useCats:
